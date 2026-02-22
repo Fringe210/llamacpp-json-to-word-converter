@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JSON to Word Converter</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <div class="logo-icon">📄</div>
+            <span data-i18n="app_title">JSON to Word</span>
+        </div>
+        <div class="language-switch">
+            <select id="uiLanguage" onchange="changeLanguage(this.value)">
+                <option value="en" selected>English</option>
+                <option value="it">Italiano</option>
+            </select>
+        </div>
+    </header>
+    
+    <main>
+        <div class="container">
+            <div class="card">
+                <div class="card-header">
+                    <h1 class="card-title" data-i18n="card_title">Convert Chat to Word</h1>
+                    <p class="card-subtitle" data-i18n="card_subtitle">Transform your JSON chat conversations into readable Word documents</p>
+                </div>
+                
+                <form id="convertForm" enctype="multipart/form-data">
+                    <div class="upload-area" id="uploadArea">
+                        <div class="upload-icon">📁</div>
+                        <div class="upload-text" data-i18n="upload_text">Drag JSON file here</div>
+                        <div class="upload-hint" data-i18n="upload_hint">or click to select</div>
+                        <input type="file" id="fileInput" name="file" accept=".json" required>
+                    </div>
+                    
+                    <div class="file-info" id="fileInfo">
+                        <span class="file-icon">📄</span>
+                        <span class="file-name" id="fileName"></span>
+                        <button type="button" class="file-remove" id="removeFile">✕</button>
+                    </div>
+
+                    <details class="settings-panel">
+                        <summary class="settings-title" data-i18n="settings_title">⚙️ Conversion Settings</summary>
+                        
+                        <div class="settings-content">
+                            <div class="settings-grid">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" name="show_date" checked>
+                                    <span data-i18n="show_date">Date & Time</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" name="show_divider" checked>
+                                    <span data-i18n="show_divider">Horizontal Dividers</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" name="show_model" checked>
+                                    <span data-i18n="show_model">AI Model</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" name="show_prompt" checked>
+                                    <span data-i18n="show_prompt">Prompt Data (Tokens)</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" name="show_numbers" checked>
+                                    <span data-i18n="show_numbers">Message Numbers</span>
+                                </label>
+                            </div>
+
+                            <div class="settings-inputs">
+                                <div class="input-group">
+                                    <label for="custom_user_name" data-i18n="custom_user">Custom User Name</label>
+                                    <input type="text" id="custom_user_name" name="custom_user_name" placeholder="e.g. User">
+                                </div>
+                                <div class="input-group">
+                                    <label for="custom_assistant_name" data-i18n="custom_assistant">Custom Assistant Name</label>
+                                    <input type="text" id="custom_assistant_name" name="custom_assistant_name" placeholder="e.g. Bot">
+                                </div>
+                            </div>
+
+                            <div class="language-selector">
+                                <label for="language" data-i18n="doc_language">🌐 Document Language</label>
+                                <select name="language" id="language">
+                                    <option value="en">English</option>
+                                    <option value="it">Italiano</option>
+                                </select>
+                            </div>
+                        </div>
+                    </details>
+                    
+                    <button type="submit" class="btn btn-primary" id="convertBtn" disabled>
+                        <span>⚡</span>
+                        <span data-i18n="convert_btn">Convert to Word</span>
+                    </button>
+                </form>
+                
+                <div class="loading" id="loading">
+                    <div class="spinner"></div>
+                    <p data-i18n="loading">Processing...</p>
+                </div>
+                
+                <div class="messages" id="messages"></div>
+                
+                <a href="{{ url_for('download_sample') }}" class="btn-link">
+                    <button type="button" class="btn btn-secondary">
+                        <span>📥</span>
+                        <span data-i18n="sample_btn">Download Sample File</span>
+                    </button>
+                </a>
+            </div>
+        </div>
+    </main>
+    
+    <footer>
+        <p data-i18n="footer">Convert your JSON chat conversations into readable Word documents</p>
+    </footer>
+
+    <script>
+        // Translations
+        const translations = {
+            en: {
+                app_title: "JSON to Word",
+                card_title: "Convert Chat to Word",
+                card_subtitle: "Transform your JSON chat conversations into readable Word documents",
+                upload_text: "Drag JSON file here",
+                upload_hint: "or click to select",
+                settings_title: "⚙️ Conversion Settings",
+                show_date: "Date & Time",
+                show_divider: "Horizontal Dividers",
+                show_model: "AI Model",
+                show_prompt: "Prompt Data (Tokens)",
+                show_numbers: "Message Numbers",
+                custom_user: "Custom User Name",
+                custom_assistant: "Custom Assistant Name",
+                doc_language: "🌐 Document Language",
+                convert_btn: "Convert to Word",
+                loading: "Processing...",
+                sample_btn: "Download Sample File",
+                footer: "Convert your JSON chat conversations into readable Word documents",
+                success: "Conversion completed! Download will start shortly.",
+                error_no_file: "Select a file first",
+                error_format: "Please select a JSON file"
+            },
+            it: {
+                app_title: "JSON to Word",
+                card_title: "Converti Chat in Word",
+                card_subtitle: "Trasforma le tue conversazioni JSON in documenti Word leggibili",
+                upload_text: "Trascina il file JSON qui",
+                upload_hint: "oppure clicca per selezionare",
+                settings_title: "⚙️ Impostazioni Conversione",
+                show_date: "Data ed Ora",
+                show_divider: "Divisori Orizzontali",
+                show_model: "Modello AI",
+                show_prompt: "Dati Prompt (Token)",
+                show_numbers: "Numeri Messaggi",
+                custom_user: "Nome Personalizzato Utente",
+                custom_assistant: "Nome Personalizzato Assistente",
+                doc_language: "🌐 Lingua Documento",
+                convert_btn: "Converti in Word",
+                loading: "Elaborazione in corso...",
+                sample_btn: "Scarica file di esempio",
+                footer: "Converti le tue conversazioni JSON in documenti Word leggibili",
+                success: "Conversione completata! Il download partirà tra un momento.",
+                error_no_file: "Seleziona un file prima",
+                error_format: "Per favore seleziona un file JSON"
+            }
+        };
+
+        let currentLang = 'en';
+
+        function changeLanguage(lang) {
+            currentLang = lang;
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (translations[lang] && translations[lang][key]) {
+                    el.textContent = translations[lang][key];
+                }
+            });
+            document.documentElement.lang = lang;
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const fileInput = document.getElementById('fileInput');
+            const uploadArea = document.getElementById('uploadArea');
+            const fileInfo = document.getElementById('fileInfo');
+            const fileName = document.getElementById('fileName');
+            const removeFile = document.getElementById('removeFile');
+            const convertBtn = document.getElementById('convertBtn');
+            const convertForm = document.getElementById('convertForm');
+            const loading = document.getElementById('loading');
+            const messages = document.getElementById('messages');
+            
+            // Drag and drop
+            uploadArea.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                uploadArea.classList.add('dragover');
+            });
+            
+            uploadArea.addEventListener('dragleave', function() {
+                uploadArea.classList.remove('dragover');
+            });
+            
+            uploadArea.addEventListener('drop', function(e) {
+                e.preventDefault();
+                uploadArea.classList.remove('dragover');
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    fileInput.files = files;
+                    handleFileSelect();
+                }
+            });
+            
+            fileInput.addEventListener('change', handleFileSelect);
+            
+            function handleFileSelect() {
+                const file = fileInput.files[0];
+                if (file) {
+                    if (!file.name.endsWith('.json')) {
+                        showMessage(translations[currentLang].error_format, 'error');
+                        return;
+                    }
+                    fileName.textContent = file.name;
+                    fileInfo.classList.add('show');
+                    convertBtn.disabled = false;
+                }
+            }
+            
+            removeFile.addEventListener('click', function() {
+                fileInput.value = '';
+                fileInfo.classList.remove('show');
+                convertBtn.disabled = true;
+            });
+            
+            convertForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                const file = fileInput.files[0];
+                if (!file) {
+                    showMessage(translations[currentLang].error_no_file, 'error');
+                    return;
+                }
+                
+                loading.classList.add('show');
+                convertBtn.disabled = true;
+                messages.innerHTML = '';
+                
+                const formData = new FormData(convertForm);
+                
+                try {
+                    const response = await fetch('/convert', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    if (response.ok) {
+                        const blob = await response.blob();
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = file.name.replace('.json', '.docx');
+                        document.body.appendChild(a);
+                        a.click();
+                        window.URL.revokeObjectURL(url);
+                        a.remove();
+                        
+                        showMessage(translations[currentLang].success, 'success');
+                    } else {
+                        const data = await response.json();
+                        showMessage(data.error || 'Error during conversion', 'error');
+                    }
+                } catch (error) {
+                    showMessage('Connection error: ' + error.message, 'error');
+                } finally {
+                    loading.classList.remove('show');
+                    convertBtn.disabled = false;
+                }
+            });
+            
+            function showMessage(text, type) {
+                const message = document.createElement('div');
+                message.className = 'message ' + type;
+                message.textContent = text;
+                messages.innerHTML = '';
+                messages.appendChild(message);
+            }
+        });
+    </script>
+</body>
+</html>
