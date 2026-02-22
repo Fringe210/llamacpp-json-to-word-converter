@@ -17,7 +17,6 @@ A Flask-based web application that converts JSON chat conversations into formatt
 
 ## Requirements
 
-- Python 3.8+
 - Flask
 - python-docx
 
@@ -25,8 +24,8 @@ A Flask-based web application that converts JSON chat conversations into formatt
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/json-to-word-converter.git
-cd json-to-word-converter
+git clone https://github.com/Fringe210/llamacpp-json-to-word-converter.git
+cd llamacpp-json-to-word-converter
 
 # Create virtual environment
 python -m venv venv
@@ -34,3 +33,5 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
+
+python app.py

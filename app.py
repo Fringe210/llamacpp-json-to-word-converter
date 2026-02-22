@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import tempfile
 from datetime import datetime
@@ -32,6 +33,298 @@ def format_timestamp(ts):
 
 def get_text(key, lang='it'):
     return TRANSLATIONS.get(lang, TRANSLATIONS['it']).get(key, key)
+
+# Rimuove i blocchi di reasoning content generati dal modello
+def strip_reasoning_content(text):
+    if not text:
+        return ""
+    # Rimuove blocchi del tipo <<<reasoning_content_start>>>...<<<reasoning_content_end>>>
+    text = re.sub(r'<<<reasoning_content_start>>>.*?<<<reasoning_content_end>>>', '', text, flags=re.DOTALL)
+    # Rimuove eventuali tag rimasti senza chiusura (fino a fine stringa)
+    text = re.sub(r'<<<reasoning_content_start>>>.*', '', text, flags=re.DOTALL)
+    return text.strip()
+
+# Funzione per pulire il testo (mantenuta per compatibilità, ora non rimuove più i marcatori markdown)
+def clean_text(text):
+    if not text:
+        return ""
+    text = strip_reasoning_content(text)
+    return text
+
+# Converte le espressioni LaTeX in simboli Unicode leggibili
+LATEX_SYMBOLS = {
+    r'\Psi': 'Ψ', r'\psi': 'ψ', r'\Phi': 'Φ', r'\phi': 'φ',
+    r'\alpha': 'α', r'\beta': 'β', r'\gamma': 'γ', r'\delta': 'δ',
+    r'\Delta': 'Δ', r'\Gamma': 'Γ', r'\Lambda': 'Λ', r'\lambda': 'λ',
+    r'\mu': 'μ', r'\nu': 'ν', r'\pi': 'π', r'\Pi': 'Π',
+    r'\rho': 'ρ', r'\sigma': 'σ', r'\Sigma': 'Σ', r'\tau': 'τ',
+    r'\theta': 'θ', r'\Theta': 'Θ', r'\omega': 'ω', r'\Omega': 'Ω',
+    r'\epsilon': 'ε', r'\eta': 'η', r'\xi': 'ξ', r'\zeta': 'ζ',
+    r'\chi': 'χ', r'\kappa': 'κ', r'\iota': 'ι', r'\upsilon': 'υ',
+    r'\infty': '∞', r'\partial': '∂', r'\nabla': '∇',
+    r'\sum': '∑', r'\prod': '∏', r'\int': '∫',
+    r'\sqrt': '√', r'\pm': '±', r'\mp': '∓',
+    r'\times': '×', r'\div': '÷', r'\cdot': '·',
+    r'\leq': '≤', r'\geq': '≥', r'\neq': '≠',
+    r'\approx': '≈', r'\equiv': '≡', r'\sim': '∼',
+    r'\in': '∈', r'\notin': '∉', r'\subset': '⊂', r'\supset': '⊃',
+    r'\cup': '∪', r'\cap': '∩', r'\emptyset': '∅',
+    r'\forall': '∀', r'\exists': '∃', r'\neg': '¬',
+    r'\wedge': '∧', r'\vee': '∨', r'\oplus': '⊕',
+    r'\rightarrow': '→', r'\leftarrow': '←', r'\Rightarrow': '⇒',
+    r'\Leftarrow': '⇐', r'\leftrightarrow': '↔', r'\Leftrightarrow': '⇔',
+    r'\uparrow': '↑', r'\downarrow': '↓',
+    r'\hbar': 'ℏ', r'\ell': 'ℓ', r'\Re': 'ℜ', r'\Im': 'ℑ',
+    r'\circ': '∘', r'\bullet': '•', r'\ldots': '…', r'\cdots': '⋯',
+    r'\^': '^', r'\_': '_',
+}
+
+def latex_to_unicode(text):
+    """Converte espressioni LaTeX $...$ in testo Unicode leggibile."""
+    def convert_expr(expr):
+        # Sostituisce comandi LaTeX noti con simboli Unicode
+        for cmd, sym in sorted(LATEX_SYMBOLS.items(), key=lambda x: -len(x[0])):
+            expr = expr.replace(cmd, sym)
+        # Gestisce ^{...} → apici (usa caratteri superscript dove possibile)
+        sup_map = {'0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹','+':'⁺','-':'⁻','n':'ⁿ'}
+        def sup_replace(m):
+            content = m.group(1)
+            return ''.join(sup_map.get(c, c) for c in content)
+        expr = re.sub(r'\^\{([^}]+)\}', sup_replace, expr)
+        expr = re.sub(r'\^(\w)', lambda m: ''.join({'0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹'}.get(c,c) for c in m.group(1)), expr)
+        # Gestisce _{...} → pedici
+        sub_map = {'0':'₀','1':'₁','2':'₂','3':'₃','4':'₄','5':'₅','6':'₆','7':'₇','8':'₈','9':'₉','+':'₊','-':'₋','n':'ₙ'}
+        def sub_replace(m):
+            content = m.group(1)
+            return ''.join(sub_map.get(c, c) for c in content)
+        expr = re.sub(r'_\{([^}]+)\}', sub_replace, expr)
+        expr = re.sub(r'_(\w)', lambda m: ''.join(sub_map.get(c,c) for c in m.group(1)), expr)
+        # Gestisce \frac{a}{b} → a/b
+        expr = re.sub(r'\\frac\{([^}]+)\}\{([^}]+)\}', r'\1/\2', expr)
+        # Rimuove \left \right e altri comandi di dimensionamento
+        expr = re.sub(r'\\(left|right|big|Big|bigg|Bigg)', '', expr)
+        # Rimuove eventuali {} rimasti
+        expr = expr.replace('{', '').replace('}', '')
+        # Rimuove backslash rimasti seguiti da spazio o fine
+        expr = re.sub(r'\\(?=\s|$)', '', expr)
+        return expr.strip()
+
+    # Sostituisce $...$  (inline math) con il testo convertito
+    result = re.sub(r'\$\$(.+?)\$\$', lambda m: convert_expr(m.group(1)), text, flags=re.DOTALL)
+    result = re.sub(r'\$(.+?)\$', lambda m: convert_expr(m.group(1)), result)
+    return result
+
+# Parsa il markdown inline (grassetto e corsivo) e aggiunge run formattati al paragrafo
+def add_inline_markdown(paragraph, text, base_size=11, base_bold=False, base_italic=False, color=None):
+    # Prima converti il LaTeX in Unicode
+    text = latex_to_unicode(text)
+    # Pattern per **bold**, *italic*, ***bold+italic***
+    pattern = re.compile(r'(\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*)')
+    last_end = 0
+    for m in pattern.finditer(text):
+        # Testo prima del match
+        if m.start() > last_end:
+            run = paragraph.add_run(text[last_end:m.start()])
+            run.font.size = Pt(base_size)
+            run.font.bold = base_bold
+            run.font.italic = base_italic
+            if color:
+                run.font.color.rgb = color
+        # Testo formattato
+        if m.group(2):  # ***bold+italic***
+            run = paragraph.add_run(m.group(2))
+            run.font.bold = True
+            run.font.italic = True
+        elif m.group(3):  # **bold**
+            run = paragraph.add_run(m.group(3))
+            run.font.bold = True
+            run.font.italic = base_italic
+        elif m.group(4):  # *italic*
+            run = paragraph.add_run(m.group(4))
+            run.font.bold = base_bold
+            run.font.italic = True
+        run.font.size = Pt(base_size)
+        if color:
+            run.font.color.rgb = color
+        last_end = m.end()
+    # Testo rimanente
+    if last_end < len(text):
+        run = paragraph.add_run(text[last_end:])
+        run.font.size = Pt(base_size)
+        run.font.bold = base_bold
+        run.font.italic = base_italic
+        if color:
+            run.font.color.rgb = color
+
+# Aggiunge una riga di testo al doc gestendo heading markdown e inline markdown
+def add_markdown_line(doc, line, indent=None, italic=False):
+    stripped = line.strip()
+    if not stripped:
+        return
+
+    # Heading 1: # testo
+    if re.match(r'^#{1}\s+', stripped) and not re.match(r'^#{2,}', stripped):
+        heading_text = re.sub(r'^#+\s+', '', stripped)
+        heading_text = latex_to_unicode(heading_text)
+        p = doc.add_heading(heading_text, level=1)
+        return
+
+    # Heading 2: ## testo
+    if re.match(r'^#{2}\s+', stripped) and not re.match(r'^#{3,}', stripped):
+        heading_text = re.sub(r'^#+\s+', '', stripped)
+        heading_text = latex_to_unicode(heading_text)
+        p = doc.add_heading(heading_text, level=2)
+        return
+
+    # Heading 3+: ### testo
+    if re.match(r'^#{3,}\s+', stripped):
+        heading_text = re.sub(r'^#+\s+', '', stripped)
+        heading_text = latex_to_unicode(heading_text)
+        p = doc.add_heading(heading_text, level=3)
+        return
+
+    # Punto elenco: "* testo" o "- testo" o "• testo"
+    bullet_match = re.match(r'^(\*|-|•)\s+(.+)$', stripped)
+    if bullet_match:
+        bullet_text = bullet_match.group(2)
+        p = doc.add_paragraph(style='List Bullet')
+        p.paragraph_format.space_before = Pt(2)
+        p.paragraph_format.space_after = Pt(2)
+        if indent:
+            p.paragraph_format.left_indent = indent
+        add_inline_markdown(p, bullet_text, base_size=11, base_italic=italic)
+        return p
+
+    # Punto elenco numerato: "1. testo" o "1) testo"
+    numbered_match = re.match(r'^\d+[.)]\s+(.+)$', stripped)
+    if numbered_match:
+        item_text = numbered_match.group(1)
+        p = doc.add_paragraph(style='List Number')
+        p.paragraph_format.space_before = Pt(2)
+        p.paragraph_format.space_after = Pt(2)
+        if indent:
+            p.paragraph_format.left_indent = indent
+        add_inline_markdown(p, item_text, base_size=11, base_italic=italic)
+        return p
+
+    # Paragrafo normale con inline markdown
+    p = doc.add_paragraph()
+    p.paragraph_format.space_before = Pt(3)
+    p.paragraph_format.space_after = Pt(3)
+    if indent:
+        p.paragraph_format.left_indent = indent
+    add_inline_markdown(p, stripped, base_size=11, base_italic=italic)
+    return p
+
+# Funzione per rilevare e parsare tabelle Markdown
+def is_markdown_table(line):
+    return line.strip().startswith('|') and line.strip().endswith('|')
+
+def parse_markdown_table(content):
+    """
+    Rileva se il contenuto contiene tabelle Markdown e le парсит.
+    Restituisce una lista di dizionari: {'type': 'table', 'data': [...]}
+    oppure {'type': 'text', 'data': ...}
+    """
+    if not content:
+        return [{'type': 'text', 'data': content}]
+    
+    lines = content.split('\n')
+    result = []
+    current_text_lines = []
+    i = 0
+    
+    while i < len(lines):
+        line = lines[i].strip()
+        
+        # Rileva inizio tabella Markdown
+        if is_markdown_table(line):
+            # Salva il testo accumulato prima della tabella
+            if current_text_lines:
+                text_block = '\n'.join(current_text_lines).strip()
+                if text_block:
+                    result.append({'type': 'text', 'data': text_block})
+                current_text_lines = []
+            
+            # Parsa la tabella
+            table_data = []
+            # Leggi le righe della tabella fino a quando ci sono righe che iniziano con |
+            while i < len(lines) and is_markdown_table(lines[i]):
+                row = [cell.strip() for cell in lines[i].strip().split('|')[1:-1]]  # Rimuovi primo e ultimo elemento vuoto
+                
+                # Salta la riga di separazione (---|---|)
+                if all(cell.strip() in ('', '-', ':', '---', ':--', '--:', ':-:', ':---', '---:', ':---:') for cell in row):
+                    i += 1
+                    continue
+                
+                if row:
+                    table_data.append(row)
+                i += 1
+            
+            if table_data:
+                result.append({'type': 'table', 'data': table_data})
+            
+            # Continua il ciclo senza incrementare i perché già fatto nel while
+            continue
+        else:
+            if line:  # Solo linee non vuote
+                current_text_lines.append(lines[i])
+            elif current_text_lines:
+                # Linea vuota: salva il testo accumulato
+                text_block = '\n'.join(current_text_lines).strip()
+                if text_block:
+                    result.append({'type': 'text', 'data': text_block})
+                current_text_lines = []
+        
+        i += 1
+    
+    # Salva eventuale testo rimanente
+    if current_text_lines:
+        text_block = '\n'.join(current_text_lines).strip()
+        if text_block:
+            result.append({'type': 'text', 'data': text_block})
+    
+    # Se non è stata trovata nessuna tabella, restituisci tutto come testo
+    if not any(block['type'] == 'table' for block in result):
+        return [{'type': 'text', 'data': content}]
+    
+    return result
+
+# Funzione per aggiungere una tabella al documento Word
+def add_table_to_doc(doc, table_data, style='Table Grid'):
+    if not table_data:
+        return
+    
+    # La prima riga è l'intestazione
+    headers = table_data[0]
+    rows = table_data[1:] if len(table_data) > 1 else []
+    
+    # Crea la tabella
+    num_rows = len(rows) + 1
+    num_cols = len(headers)
+    
+    table = doc.add_table(rows=num_rows, cols=num_cols)
+    table.style = style
+    
+    # Aggiungi l'intestazione
+    for col_idx, header in enumerate(headers):
+        cell = table.rows[0].cells[col_idx]
+        cell.text = header
+        # Formatta l'intestazione
+        for paragraph in cell.paragraphs:
+            for run in paragraph.runs:
+                run.font.bold = True
+                run.font.size = Pt(11)
+    
+    # Aggiungi le righe dati
+    for row_idx, row_data in enumerate(rows):
+        for col_idx, cell_data in enumerate(row_data):
+            if col_idx < num_cols:
+                cell = table.rows[row_idx + 1].cells[col_idx]
+                cell.text = cell_data
+                for paragraph in cell.paragraphs:
+                    for run in paragraph.runs:
+                        run.font.size = Pt(10)
 
 def convert_json_to_docx(json_data, doc, options, lang):
     t = lambda k: get_text(k, lang)
@@ -133,13 +426,20 @@ def convert_json_to_docx(json_data, doc, options, lang):
         # Contenuto del messaggio
         if content:
             content_clean = content.replace('\\n', '\n').replace('\\t', '\t')
-            for line in content_clean.split('\n'):
-                if line.strip():
-                    p_line = doc.add_paragraph(line.strip())
-                    p_line.paragraph_format.space_before = Pt(3)
-                    p_line.paragraph_format.space_after = Pt(3)
-                    for run in p_line.runs:
-                        run.font.size = Pt(11)
+            content_clean = clean_text(content_clean)
+            
+            # Parse del contenuto per rilevare tabelle
+            content_blocks = parse_markdown_table(content_clean)
+            
+            for block in content_blocks:
+                if block['type'] == 'table':
+                    # Aggiungi la tabella
+                    add_table_to_doc(doc, block['data'])
+                else:
+                    # Testo normale con supporto markdown
+                    for line in block['data'].split('\n'):
+                        if line.strip():
+                            add_markdown_line(doc, line)
         
         # Contenuto Extra
         extra = msg.get('extra', [])
@@ -156,13 +456,18 @@ def convert_json_to_docx(json_data, doc, options, lang):
                         extra_content = item.get('content', '')
                         if extra_content:
                             extra_clean = extra_content.replace('\\n', '\n')
-                            for line in extra_clean.split('\n'):
-                                if line.strip():
-                                    p_line = doc.add_paragraph(line.strip())
-                                    p_line.paragraph_format.left_indent = Inches(0.3)
-                                    for run in p_line.runs:
-                                        run.font.size = Pt(10)
-                                        run.font.italic = True
+                            extra_clean = clean_text(extra_clean)
+                            
+                            # Anche per l'extra content, rileva tabelle
+                            extra_blocks = parse_markdown_table(extra_clean)
+                            
+                            for block in extra_blocks:
+                                if block['type'] == 'table':
+                                    add_table_to_doc(doc, block['data'])
+                                else:
+                                    for line in block['data'].split('\n'):
+                                        if line.strip():
+                                            add_markdown_line(doc, line, indent=Inches(0.3), italic=True)
         
         # Dati Prompt (Timing)
         if options.get('show_prompt'):
@@ -297,7 +602,7 @@ def download_sample():
             {
                 "convId": "sample-id",
                 "role": "assistant",
-                "content": "Ciao! Sono un assistente virtuale. Come posso aiutarti?",
+                "content": "Ecco una tabella di esempio:\n\n| Nome | Età | Città |\n|------|-----|-------|\n| Mario | 30 | Roma |\n| Giulia | 25 | Milano |\n| Luca | 35 | Napoli |",
                 "type": "text",
                 "timestamp": 1771702156981,
                 "model": "Modello-Esempio",
